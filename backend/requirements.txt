@@ -1,0 +1,30 @@
+# Core dependencies
+fastapi
+uvicorn
+python-dotenv
+python-multipart
+
+# Google Gemini
+google-generativeai
+google-auth-oauthlib
+google-api-python-client
+
+# Database & Vector Store
+psycopg2-binary
+langchain
+langchain-google-genai
+langchain-community
+faiss-cpu==1.7.4 
+
+# Text processing
+numpy
+pandas
+tqdm
+
+# Data validation
+pydantic
+pydantic-settings
+
+# Optional (pour le développement)
+python-jose
+passlib
