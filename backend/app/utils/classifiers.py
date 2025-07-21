@@ -8,6 +8,10 @@ from app.config import (
     TEMPERATURE,
     MAX_TOKENS
 )
+import os
+from google.generativeai.types import content_types  # utile pour certaines options avancées si besoin
+from dotenv import load_dotenv
+load_dotenv()
 
 # Configuration de l'API (fait une fois)
 genai.configure(api_key=GEMINI_API_KEY)
@@ -63,18 +67,19 @@ class QueryClassifier:
     def _classify_with_ai(self, query: str) -> GitHubQueryType:
         """Utilise Gemini pour classification avancée"""
         try:
+            import google.generativeai as genai
+            from google.generativeai.types import content_types
+
+            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+
+            model = genai.GenerativeModel(model_name=GEMINI_MODEL_NAME)
+
             prompt = self._build_github_prompt(query)
-            response = genai.chat.completions.create(
-                model=GEMINI_MODEL_NAME,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=TEMPERATURE,
-                max_output_tokens=MAX_TOKENS,
-                top_p=0.85
-            )
-            # Récupération du texte généré
-            classification = response.choices[0].message.content.strip().lower()
             
-            # Valide que la classification est dans l'enum, sinon UNKNOWN
+            response = model.generate_content(prompt)
+
+            classification = response.text.strip().lower()
+
             if classification in [e.value for e in GitHubQueryType]:
                 return GitHubQueryType(classification)
             else:
@@ -82,6 +87,7 @@ class QueryClassifier:
         except Exception as e:
             print(f"Classification error: {str(e)}")
             return GitHubQueryType.UNKNOWN
+
 
     def _build_github_prompt(self, query: str) -> str:
         """Construit un prompt technique spécifique à GitHub"""
