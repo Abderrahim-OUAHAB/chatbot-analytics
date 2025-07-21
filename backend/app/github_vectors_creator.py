@@ -6,6 +6,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 import psycopg2
 from dotenv import load_dotenv
 from datetime import datetime
+import google.generativeai as genai
 
 # Charger les variables d'environnement (.env)
 load_dotenv()
@@ -17,11 +18,11 @@ os.makedirs(VECTOR_STORE_PATH, exist_ok=True)
 class EmbeddingService:
     def __init__(self, api_key: str):
         self.api_key = api_key
-        # TODO: Connecter l’API Gemini réelle
+        genai.configure(api_key=api_key)
+        self.embed_model = genai.Embedding(model="models/embedding-001")
 
     def embed_texts(self, texts: List[str]) -> List[List[float]]:
-        # Remplacer cette ligne par appel réel à Gemini
-        return [[0.0] * 768 for _ in texts]
+        return [self.embed_model.embed(content=t)["embedding"] for t in texts]
 
 # Connexion PostgreSQL
 def get_db_connection():
