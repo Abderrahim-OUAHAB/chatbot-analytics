@@ -1,6 +1,8 @@
+
 import axios from 'axios';
 import { BarChart3, Bot, Code2, Database, GitBranch, Send, Sparkles, TrendingUp, User, Zap } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+
 // Simulateur de l'API backend
 const simulateAPICall = async (message, sessionId = null) => {
   try {
@@ -15,16 +17,68 @@ const simulateAPICall = async (message, sessionId = null) => {
       session_id: response.data.session_id
     };
   } catch (error) {
-    throw new Error(error);}
+    throw new Error(error.response?.data?.detail || error.message);
+  }
 };
 
-// Composant Chart amélioré avec animations
+// Fonctions utilitaires corrigées
+function getColor(index) {
+  const colors = [
+    '#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#6366f1',
+    '#ec4899', '#14b8a6', '#f97316', '#8b5cf6', '#06b6d4'
+  ];
+  return colors[index % colors.length];
+}
+
+function interpolateColor(color1, color2, factor) {
+  const hex = (color) => {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(color);
+    return result ? [
+      parseInt(result[1], 16),
+      parseInt(result[2], 16),
+      parseInt(result[3], 16)
+    ] : [0, 0, 0];
+  };
+
+  const rgb1 = hex(color1);
+  const rgb2 = hex(color2);
+  
+  // Fix: Calcul correct de l'interpolation
+  const result = rgb1.map((channel, i) => 
+    Math.round(channel + factor * (rgb2[i] - channel))
+  );
+    
+  return `rgb(${result.join(',')})`;
+}
+
+// Composant Chart amélioré avec corrections
 const Chart = ({ data }) => {
   if (!data?.chart) return null;
 
   const { chart } = data;
-  const maxValue = Math.max(...chart.datasets.flatMap(d => d.data));
+  
+  // Fix: Gestion sécurisée du calcul maxValue
+  const getAllValues = () => {
+    const values = [];
+    chart.datasets.forEach(dataset => {
+      if (Array.isArray(dataset.data)) {
+        dataset.data.forEach(value => {
+          if (typeof value === 'object' && value !== null) {
+            // Pour scatter plot
+            if (typeof value.x === 'number') values.push(value.x);
+            if (typeof value.y === 'number') values.push(value.y);
+          } else if (typeof value === 'number' && Number.isFinite(value)) {
+            values.push(value);
+          }
+        });
+      }
+    });
+    return values;
+  };
 
+  const maxValue = Math.max(...getAllValues()) || 100;
+
+  // Graphique en barres
   if (chart.type === 'bar') {
     return (
       <div className="bg-gradient-to-br from-white to-gray-50 p-6 rounded-2xl border border-gray-100 shadow-xl backdrop-blur-sm">
@@ -59,6 +113,7 @@ const Chart = ({ data }) => {
     );
   }
 
+  // Graphique linéaire
   if (chart.type === 'line') {
     return (
       <div className="bg-gradient-to-br from-white to-indigo-50 p-6 rounded-2xl border border-indigo-100 shadow-xl">
@@ -84,7 +139,7 @@ const Chart = ({ data }) => {
             <rect width="100%" height="100%" fill="url(#grid)" />
             
             {/* Area under curve */}
-            {chart.datasets.map((dataset) => {
+            {chart.datasets.map((dataset, datasetIdx) => {
               const points = dataset.data.map((value, idx) => {
                 const x = 50 + (idx * 300) / (dataset.data.length - 1);
                 const y = 180 - (value / maxValue) * 160;
@@ -94,7 +149,7 @@ const Chart = ({ data }) => {
               
               return (
                 <polygon
-                  key="area"
+                  key={`area-${datasetIdx}`}
                   points={areaPoints}
                   fill="url(#chartGradient)"
                   className="animate-fade-in"
@@ -103,7 +158,7 @@ const Chart = ({ data }) => {
             })}
             
             {/* Line */}
-            {chart.datasets.map((dataset) => {
+            {chart.datasets.map((dataset, datasetIdx) => {
               const points = dataset.data.map((value, idx) => {
                 const x = 50 + (idx * 300) / (dataset.data.length - 1);
                 const y = 180 - (value / maxValue) * 160;
@@ -112,7 +167,7 @@ const Chart = ({ data }) => {
               
               return (
                 <polyline
-                  key="line"
+                  key={`line-${datasetIdx}`}
                   fill="none"
                   stroke={dataset.borderColor}
                   strokeWidth="4"
@@ -167,7 +222,419 @@ const Chart = ({ data }) => {
     );
   }
 
-  return null;
+  // Graphique circulaire (Pie)
+  if (chart.type === 'pie') {
+    const total = chart.datasets[0].data.reduce((a, b) => a + b, 0);
+    
+    return (
+      <div className="bg-gradient-to-br from-white to-gray-50 p-6 rounded-2xl border border-gray-100 shadow-xl">
+        <div className="flex items-center space-x-2 mb-6">
+          <div className="w-2 h-2 bg-gradient-to-r from-pink-500 to-rose-500 rounded-full animate-pulse"></div>
+          <h3 className="text-xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
+            {chart.title}
+          </h3>
+        </div>
+        <div className="relative h-64">
+          <svg viewBox="0 0 200 200" className="w-full h-full">
+            {chart.datasets[0].data.map((value, idx) => {
+              const percentage = value / total;
+              const angle = percentage * 360;
+              const cumulativeAngle = chart.datasets[0].data
+                .slice(0, idx)
+                .reduce((a, b) => a + (b / total) * 360, 0);
+              
+              // Fix: Gestion des angles pour éviter les erreurs SVG
+              const startAngle = (cumulativeAngle * Math.PI) / 180;
+              const endAngle = ((cumulativeAngle + angle) * Math.PI) / 180;
+              const largeArcFlag = angle > 180 ? 1 : 0;
+              
+              const x1 = 100 + Math.cos(startAngle) * 80;
+              const y1 = 100 + Math.sin(startAngle) * 80;
+              const x2 = 100 + Math.cos(endAngle) * 80;
+              const y2 = 100 + Math.sin(endAngle) * 80;
+              
+              return (
+                <g key={idx}>
+                  <path
+                    d={`M 100,100 L ${x1},${y1} A 80,80 0 ${largeArcFlag},1 ${x2},${y2} Z`}
+                    fill={chart.datasets[0].backgroundColor?.[idx] || getColor(idx)}
+                    className="transition-all duration-500 hover:opacity-90 hover:scale-105 origin-center"
+                  />
+                  <text
+                    x={100 + Math.cos((startAngle + endAngle) / 2) * 50}
+                    y={100 + Math.sin((startAngle + endAngle) / 2) * 50}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    className="text-xs font-medium fill-gray-800"
+                  >
+                    {Math.round(percentage * 100)}%
+                  </text>
+                </g>
+              );
+            })}
+            <circle cx="100" cy="100" r="30" fill="white" />
+          </svg>
+          <div className="flex flex-wrap justify-center gap-2 mt-4">
+            {chart.labels.map((label, idx) => (
+              <div key={label} className="flex items-center">
+                <div 
+                  className="w-3 h-3 rounded-full mr-2" 
+                  style={{ backgroundColor: chart.datasets[0].backgroundColor?.[idx] || getColor(idx) }}
+                />
+                <span className="text-xs text-gray-700">{label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Heatmap corrigée
+  if (chart.type === 'heatmap') {
+    const cellSize = 30;
+    const legendHeight = 20;
+    
+    // Fix: Calcul sécurisé des valeurs min/max
+    const allValues = chart.datasets.flatMap(d => d.data).filter(v => typeof v === 'number');
+    const minValue = Math.min(...allValues);
+    const maxValue = Math.max(...allValues);
+    const valueRange = maxValue - minValue || 1;
+    
+    return (
+      <div className="bg-gradient-to-br from-white to-gray-50 p-6 rounded-2xl border border-gray-100 shadow-xl">
+        <div className="flex items-center space-x-2 mb-6">
+          <div className="w-2 h-2 bg-gradient-to-r from-orange-500 to-red-500 rounded-full animate-pulse"></div>
+          <h3 className="text-xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
+            {chart.title}
+          </h3>
+        </div>
+        <div className="overflow-auto">
+          <svg 
+            width={chart.labels.length * cellSize + 100} 
+            height={chart.datasets.length * cellSize + legendHeight + 30}
+          >
+            {/* Légende */}
+            <defs>
+              <linearGradient id="heatmap-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#f8fafc" />
+                <stop offset="50%" stopColor="#f97316" />
+                <stop offset="100%" stopColor="#ef4444" />
+              </linearGradient>
+            </defs>
+            <rect 
+              x={0} 
+              y={0} 
+              width={chart.labels.length * cellSize} 
+              height={legendHeight} 
+              fill="url(#heatmap-gradient)"
+            />
+            <text 
+              x={0} 
+              y={legendHeight + 15} 
+              className="text-xs fill-gray-600"
+            >
+              Min: {minValue}
+            </text>
+            <text 
+              x={chart.labels.length * cellSize - 30} 
+              y={legendHeight + 15} 
+              className="text-xs fill-gray-600"
+            >
+              Max: {maxValue}
+            </text>
+            
+            {/* Heatmap */}
+            {chart.datasets.map((dataset, rowIdx) => (
+              <g key={rowIdx} transform={`translate(0, ${rowIdx * cellSize + legendHeight + 30})`}>
+                <text 
+                  x={-5} 
+                  y={cellSize / 2} 
+                  textAnchor="end" 
+                  dominantBaseline="middle" 
+                  className="text-xs fill-gray-600"
+                >
+                  {dataset.label}
+                </text>
+                {dataset.data.map((value, colIdx) => {
+                  // Fix: Normalisation correcte
+                  const normalized = (value - minValue) / valueRange;
+                  const color = interpolateColor('#f8fafc', '#ef4444', normalized);
+                  
+                  return (
+                    <g key={colIdx} transform={`translate(${colIdx * cellSize}, 0)`}>
+                      <rect 
+                        width={cellSize - 2} 
+                        height={cellSize - 2} 
+                        fill={color}
+                        rx="4"
+                        className="transition-all duration-300 hover:scale-110"
+                      />
+                      <text 
+                        x={cellSize / 2} 
+                        y={cellSize / 2} 
+                        textAnchor="middle" 
+                        dominantBaseline="middle" 
+                        className="text-xs font-medium"
+                        fill={normalized > 0.6 ? 'white' : '#374151'}
+                      >
+                        {value}
+                      </text>
+                    </g>
+                  );
+                })}
+              </g>
+            ))}
+            
+            {/* Labels X */}
+            <g transform={`translate(0, ${chart.datasets.length * cellSize + legendHeight + 30})`}>
+              {chart.labels.map((label, idx) => (
+                <text 
+                  key={idx}
+                  x={idx * cellSize + cellSize / 2} 
+                  y={15} 
+                  textAnchor="middle" 
+                  className="text-xs fill-gray-600"
+                >
+                  {label}
+                </text>
+              ))}
+            </g>
+          </svg>
+        </div>
+      </div>
+    );
+  }
+
+  // Radar Chart
+  if (chart.type === 'radar') {
+    const centerX = 150;
+    const centerY = 150;
+    const radius = 100;
+    const axes = chart.labels.length;
+    
+    return (
+      <div className="bg-gradient-to-br from-white to-gray-50 p-6 rounded-2xl border border-gray-100 shadow-xl">
+        <div className="flex items-center space-x-2 mb-6">
+          <div className="w-2 h-2 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full animate-pulse"></div>
+          <h3 className="text-xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
+            {chart.title}
+          </h3>
+        </div>
+        <div className="relative h-80">
+          <svg viewBox="0 0 300 300" className="w-full h-full">
+            {/* Grille */}
+            {[0.25, 0.5, 0.75, 1].map((level, i) => (
+              <polygon
+                key={i}
+                points={Array.from({ length: axes }).map((_, idx) => {
+                  const angle = (idx * 2 * Math.PI / axes) - Math.PI / 2;
+                  return `${centerX + Math.cos(angle) * radius * level},${centerY + Math.sin(angle) * radius * level}`;
+                }).join(' ')}
+                fill="none"
+                stroke="#e2e8f0"
+                strokeWidth="0.5"
+              />
+            ))}
+            
+            {/* Axes */}
+            {chart.labels.map((_, idx) => {
+              const angle = (idx * 2 * Math.PI / axes) - Math.PI / 2;
+              return (
+                <line
+                  key={idx}
+                  x1={centerX}
+                  y1={centerY}
+                  x2={centerX + Math.cos(angle) * radius}
+                  y2={centerY + Math.sin(angle) * radius}
+                  stroke="#e2e8f0"
+                  strokeWidth="0.5"
+                />
+              );
+            })}
+            
+            {/* Données */}
+            {chart.datasets.map((dataset, i) => {
+              const points = dataset.data.map((value, idx) => {
+                const angle = (idx * 2 * Math.PI / axes) - Math.PI / 2;
+                const scaledValue = (value / maxValue) * radius;
+                return `${centerX + Math.cos(angle) * scaledValue},${centerY + Math.sin(angle) * scaledValue}`;
+              }).join(' ');
+              
+              return (
+                <g key={i}>
+                  <polygon
+                    points={points}
+                    fill={dataset.backgroundColor || `rgba(99, 102, 241, 0.2)`}
+                    stroke={dataset.borderColor || '#6366f1'}
+                    strokeWidth="2"
+                    className="animate-fade-in"
+                  />
+                  {dataset.data.map((value, idx) => {
+                    const angle = (idx * 2 * Math.PI / axes) - Math.PI / 2;
+                    const scaledValue = (value / maxValue) * radius;
+                    return (
+                      <circle
+                        key={idx}
+                        cx={centerX + Math.cos(angle) * scaledValue}
+                        cy={centerY + Math.sin(angle) * scaledValue}
+                        r="4"
+                        fill={dataset.borderColor || '#6366f1'}
+                        stroke="white"
+                        strokeWidth="1.5"
+                        className="animate-pulse"
+                      />
+                    );
+                  })}
+                </g>
+              );
+            })}
+            
+            {/* Labels */}
+            {chart.labels.map((label, idx) => {
+              const angle = (idx * 2 * Math.PI / axes) - Math.PI / 2;
+              const labelRadius = radius + 20;
+              return (
+                <text
+                  key={idx}
+                  x={centerX + Math.cos(angle) * labelRadius}
+                  y={centerY + Math.sin(angle) * labelRadius}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  className="text-xs fill-gray-600 font-medium"
+                >
+                  {label}
+                </text>
+              );
+            })}
+          </svg>
+        </div>
+        <div className="flex flex-wrap justify-center gap-4 mt-4">
+          {chart.datasets.map((dataset, i) => (
+            <div key={i} className="flex items-center">
+              <div 
+                className="w-3 h-3 rounded-full mr-2" 
+                style={{ backgroundColor: dataset.borderColor || '#6366f1' }}
+              />
+              <span className="text-xs text-gray-700">{dataset.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Scatter Plot
+  if (chart.type === 'scatter') {
+    return (
+      <div className="bg-gradient-to-br from-white to-gray-50 p-6 rounded-2xl border border-gray-100 shadow-xl">
+        <div className="flex items-center space-x-2 mb-6">
+          <div className="w-2 h-2 bg-gradient-to-r from-green-500 to-teal-500 rounded-full animate-pulse"></div>
+          <h3 className="text-xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
+            {chart.title}
+          </h3>
+        </div>
+        <div className="relative h-80">
+          <svg viewBox="0 0 400 300" className="w-full h-full">
+            {/* Axes */}
+            <line x1="50" y1="250" x2="350" y2="250" stroke="#e2e8f0" strokeWidth="1" />
+            <line x1="50" y1="250" x2="50" y2="50" stroke="#e2e8f0" strokeWidth="1" />
+            
+            {/* Grid */}
+            {[0, 1, 2, 3, 4].map((i) => (
+              <g key={`xgrid-${i}`}>
+                <line 
+                  x1={50 + (i * 75)} 
+                  y1="250" 
+                  x2={50 + (i * 75)} 
+                  y2="50" 
+                  stroke="#f1f5f9" 
+                  strokeWidth="0.5" 
+                />
+                <text 
+                  x={50 + (i * 75)} 
+                  y="265" 
+                  textAnchor="middle" 
+                  className="text-xs fill-gray-500"
+                >
+                  {Math.round(i * (maxValue / 4))}
+                </text>
+              </g>
+            ))}
+            
+            {[0, 1, 2, 3, 4].map((i) => (
+              <g key={`ygrid-${i}`}>
+                <line 
+                  x1="50" 
+                  y1={250 - (i * 50)} 
+                  x2="350" 
+                  y2={250 - (i * 50)} 
+                  stroke="#f1f5f9" 
+                  strokeWidth="0.5" 
+                />
+                <text 
+                  x="35" 
+                  y={250 - (i * 50)} 
+                  textAnchor="end" 
+                  dominantBaseline="middle" 
+                  className="text-xs fill-gray-500"
+                >
+                  {Math.round(i * (maxValue / 4))}
+                </text>
+              </g>
+            ))}
+            
+            {/* Points */}
+            {chart.datasets.map((dataset, i) => (
+              dataset.data.map((point, j) => (
+                <circle
+                  key={`point-${i}-${j}`}
+                  cx={50 + (point.x / maxValue) * 300}
+                  cy={250 - (point.y / maxValue) * 200}
+                  r="6"
+                  fill={dataset.backgroundColor || '#10b981'}
+                  stroke={dataset.borderColor || '#059669'}
+                  strokeWidth="1.5"
+                  className="transition-all duration-300 hover:r-8"
+                />
+              ))
+            ))}
+            
+            {/* Légende */}
+            <g transform="translate(300, 20)">
+              {chart.datasets.map((dataset, i) => (
+                <g key={`legend-${i}`} transform={`translate(0, ${i * 20})`}>
+                  <circle 
+                    cx="5" 
+                    cy="5" 
+                    r="5" 
+                    fill={dataset.backgroundColor || '#10b981'} 
+                    stroke={dataset.borderColor || '#059669'}
+                  />
+                  <text 
+                    x="15" 
+                    y="7" 
+                    className="text-xs fill-gray-600"
+                  >
+                    {dataset.label}
+                  </text>
+                </g>
+              ))}
+            </g>
+          </svg>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white/90 p-6 rounded-xl border border-gray-200 shadow">
+      <p className="text-gray-700">Type de graphique non supporté: {chart.type}</p>
+      <pre className="text-xs mt-2 p-2 bg-gray-50 rounded overflow-auto">
+        {JSON.stringify(data, null, 2)}
+      </pre>
+    </div>
+  );
 };
 
 // Composant de particules flottantes
@@ -189,6 +656,7 @@ const FloatingParticles = () => {
     </div>
   );
 };
+
 
 // Composant principal
 const GitHubChatbot = () => {

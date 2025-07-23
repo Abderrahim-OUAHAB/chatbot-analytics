@@ -28,8 +28,28 @@ class AIService:
             allow_dangerous_deserialization=True
         )
 
-    def _retrieve_relevant_data(self, query: str) -> List[Dict]:
-        docs = self.vector_store.similarity_search(query, k=3)
+    def _retrieve_relevant_data(self, query: str, query_type: GitHubQueryType = None) -> List[Dict]:
+        # Recherche basique
+        docs = self.vector_store.similarity_search(query, k=5)
+        
+        # Filtrage intelligent selon le type de requête
+        if query_type:
+            filtered_docs = []
+            for doc in docs:
+                doc_type = doc.metadata.get('type', '')
+                
+                # Filtres spécialisés
+                if query_type == GitHubQueryType.TEAM_PERFORMANCE and doc_type == 'developer':
+                    filtered_docs.append(doc)
+                elif query_type == GitHubQueryType.TREND and doc_type == 'trend':
+                    filtered_docs.append(doc)
+                elif query_type == GitHubQueryType.RISK_ASSESSMENT and doc_type == 'kpi_status':
+                    filtered_docs.append(doc)
+                else:
+                    filtered_docs.append(doc)  # Garde tout si pas de filtre spécifique
+            
+            docs = filtered_docs[:3]  # Limite à 3 documents les plus pertinents
+        
         return [self._parse_github_doc(doc) for doc in docs]
 
     def _parse_github_doc(self, doc) -> Dict:
@@ -41,6 +61,31 @@ class AIService:
             }
         except json.JSONDecodeError:
             return {"raw_content": doc.page_content, **doc.metadata}
+    
+    def _get_kpi_context(self, query_type: GitHubQueryType) -> str:
+        """Récupère le contexte KPI spécifique selon le type de requête"""
+        kpi_contexts = {
+            GitHubQueryType.TEAM_PERFORMANCE: """
+            Métriques clés : commit_count, pr_merge_time_avg, review_delay_avg
+            Seuils : >50 commits/mois (bon), <20 commits/mois (attention)
+            """,
+            GitHubQueryType.RISK_ASSESSMENT: """
+            Indicateurs de risque : reopened_issues, vulnerabilities, build failures
+            Seuils critiques : >5 reopened_issues, >10 vulnérabilités critiques
+            """,
+            GitHubQueryType.CODE_HEALTH: """
+            Métriques santé : coverage, bugs, code_smells, technical_debt
+            Objectifs : >80% coverage, <1% bug density
+            """
+        }
+        return kpi_contexts.get(query_type, "")
+
+    def _enhance_prompt_with_kpi_insights(self, base_prompt: str, query_type: GitHubQueryType) -> str:
+        """Enrichit le prompt avec des insights KPI"""
+        kpi_context = self._get_kpi_context(query_type)
+        if kpi_context:
+            base_prompt += f"\n\nContexte KPI :\n{kpi_context}\n"
+        return base_prompt
 
     def prepare_prompt(self, user_query: str) -> str:
         relevant_data = self._retrieve_relevant_data(user_query)

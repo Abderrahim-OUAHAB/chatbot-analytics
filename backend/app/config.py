@@ -46,6 +46,24 @@ SYSTEM_PROMPT = """Vous êtes un expert en analyse de données GitHub. Répondez
   "sql": "SELECT...",  // Requête générée
   "analysis": "3-7 lignes d'observations techniques"
 }
+NOUVEAUX TYPES DE RÉPONSES DÉCISIONNELLES :
+
+Pour les analyses KPI, incluez :
+{
+  "kpi_insights": [
+    {
+      "metric": "pr_merge_time_avg", 
+      "value": 45.2,
+      "status": "warning",
+      "recommendation": "Optimiser le processus de review"
+    }
+  ],
+  "decisions": {
+    "priority": "high|medium|low",
+    "actions": ["Action 1", "Action 2"],
+    "timeline": "immediate|1-week|1-month"
+  }
+}
 
 Règles techniques :
 1. Types de graphiques :
@@ -77,7 +95,7 @@ Utilisateur: "Compare les commits entre React et Vue"
       {"label": "Développeurs actifs", "data": [15, 12]}
     ]
   },
-  "sql": "SELECT repo, COUNT(*) FROM commits WHERE...",
+  "sql": "SELECT repo, COUNT(*) FROM commit_dim WHERE...",
   "analysis": "React montre 10% plus d'activité que Vue. L'équipe React compte 3 développeurs supplémentaires."
 }
 
@@ -101,7 +119,7 @@ Utilisateur: "Évolution des temps de merge"
 Utilisateur: "Qui a le plus contribué ce mois-ci ?"
 {
   "analysis": "Top 3 contributeurs ce mois-ci :\n1. Alice (42 commits)\n2. Bob (38 commits)\n3. Charlie (29 commits)",
-  "sql": "SELECT author, COUNT(*) FROM commits WHERE..."
+  "sql": "SELECT author, COUNT(*) FROM commit_dim WHERE..."
 }
 """
 
@@ -179,10 +197,17 @@ VECTOR_SEARCH_CONFIG = {
 
 # Métriques GitHub valides à utiliser dans le système
 AVAILABLE_METRICS = [
-    "commits", "prs", "issues", 
-    "merge_time", "review_comments",
-    "code_coverage", "test_failures",
-    "dependencies"
+    # Métriques existantes
+    "commits", "prs", "issues", "merge_time", "review_comments",
+    "code_coverage", "test_failures", "dependencies",
+    
+    # Nouvelles métriques KPI
+    "pr_merge_time_avg", "reopened_issues", "review_delay_avg",
+    "commit_frequency", "bug_density", "vulnerability_score",
+    "build_success_rate", "deployment_frequency", "lead_time",
+    "mttr", "change_failure_rate", "team_velocity",
+    "code_churn", "technical_debt", "contributor_growth",
+    "issue_resolution_time", "pr_size_distribution"
 ]
 
 # Schéma attendu des données GitHub dans l’analyse
@@ -192,4 +217,30 @@ GITHUB_RESPONSE_SCHEMA = {
         "commits": ["repo_id", "author_id"],
         "pull_requests": ["base_repo_id", "head_repo_id"]
     }
+}
+
+KPI_ANALYSIS_PROMPTS = {
+    "team_performance": """
+    Analysez les performances d'équipe en considérant :
+    - Vélocité des commits et PR
+    - Temps de review et merge
+    - Collaboration (commentaires, discussions)
+    - Répartition de la charge de travail
+    """,
+    
+    "risk_assessment": """
+    Évaluez les risques projet basés sur :
+    - Issues critiques non résolues
+    - Vulnérabilités de sécurité
+    - Taux d'échec des builds
+    - Technical debt accumulée
+    """,
+    
+    "prediction": """
+    Fournissez des prédictions basées sur :
+    - Tendances historiques des métriques
+    - Saisonnalité de l'activité
+    - Patterns de performance équipe
+    - Cycle de vie des releases
+    """
 }

@@ -24,7 +24,15 @@ class GitHubQueryType(Enum):
     CODE_QUALITY = "quality" # Qualité du code
     CI_CD = "ci_cd"          # Intégration continue
     ACTIVITY = "activity"    # Activité globale
+    PREDICTION = "prediction"     # Prédictions basées sur les données
+    ANOMALY = "anomaly"          # Détection d'anomalies
+    TEAM_PERFORMANCE = "team_performance"  # Performance d'équipe
+    RISK_ASSESSMENT = "risk_assessment"    # Évaluation des risques
+    PRODUCTIVITY = "productivity"          # Analyse de productivité
+    CODE_HEALTH = "code_health"           # Santé globale du code
+    RELEASE_READINESS = "release_readiness" # Préparation aux releases
     UNKNOWN = "unknown"      # Type inconnu
+    
 
 class QueryClassifier:
     def __init__(self):
@@ -45,7 +53,23 @@ class QueryClassifier:
             GitHubQueryType.CI_CD: [
                 "ci", "cd", "pipeline", "build", "deploy",
                 "github actions", "jenkins", "failed tests"
-            ]
+            ],
+            GitHubQueryType.PREDICTION: [
+    "predict", "forecast", "estimate", "future", "next month",
+    "expected", "probability", "likelihood"
+            ],
+            GitHubQueryType.ANOMALY: [
+                "anomaly", "unusual", "outlier", "abnormal", "spike",
+                "drop", "irregular", "deviation"
+            ],
+            GitHubQueryType.TEAM_PERFORMANCE: [
+                "team", "developer", "contributor", "performance",
+                "productivity", "efficiency", "collaboration"
+            ],
+            GitHubQueryType.RISK_ASSESSMENT: [
+                "risk", "critical", "blocker", "urgent", "security",
+                "vulnerability", "technical debt", "maintenance"
+]
         }
 
     def classify_github_query(self, query: str) -> GitHubQueryType:
